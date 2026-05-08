@@ -1,0 +1,26 @@
+{
+  "name": "netlify-next-first-user-cache-repro",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "prebuild": "node scripts/simulate-contentful-build.js",
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start",
+    "netlify:build": "netlify build",
+    "netlify:dev": "netlify dev"
+  },
+  "dependencies": {
+    "@netlify/plugin-nextjs": "latest",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "typescript": "^5.7.2",
+    "netlify-cli": "latest"
+  }
+}

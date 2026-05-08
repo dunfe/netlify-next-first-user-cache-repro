@@ -1,0 +1,146 @@
+# Netlify + Next.js first-user cache poisoning repro
+
+This is a minimal project to reproduce the reported behavior:
+
+- `/dashboard` is a dynamic App Router page (`ƒ`).
+- It reads the current user from the `user` cookie on every SSR render.
+- A simulated Contentful build failure is enabled with `SIMULATE_CONTENTFUL_FAILURE=1`.
+- When that flag is enabled, middleware adds a cacheable `Cache-Control` header to `/dashboard`.
+- On Netlify, the Next adapter/runtime can promote that response to `Netlify-CDN-Cache-Control: ..., durable` while the default `Netlify-Vary` does **not** vary by auth cookie.
+- Result: the first user to hit `/dashboard` after deploy can seed the cached dashboard response for later users.
+
+This is intentionally a *root-cause repro*, not a recommended application pattern.
+
+## Files of interest
+
+- `app/dashboard/page.tsx`
+  - dynamic page
+  - reads `cookies()` and prints both current header user and dashboard data owner
+- `proxy.ts` (Next.js 16 replacement for middleware)
+  - only when `SIMULATE_CONTENTFUL_FAILURE=1`, adds cacheable response headers for `/dashboard`
+  - this mimics the post-build bad state seen when Contentful static generation fails but the deploy still succeeds
+- `scripts/simulate-contentful-build.js`
+  - prebuild script that writes `.contentful-build-failed` when `SIMULATE_CONTENTFUL_FAILURE=1`
+- `netlify.toml`
+  - uses `@netlify/plugin-nextjs`
+
+## Deploy to Netlify
+
+Set environment variable in Netlify:
+
+```bash
+SIMULATE_CONTENTFUL_FAILURE=1
+```
+
+Then deploy:
+
+```bash
+npm install
+npm run build
+```
+
+or with Netlify CLI:
+
+```bash
+netlify deploy --build --prod
+```
+
+## Reproduce with browser
+
+After the deploy is live:
+
+1. Open a fresh browser profile as user A.
+2. Set cookie for the site:
+
+```js
+document.cookie = 'user=A; Path=/; SameSite=Lax'
+location.href = '/dashboard'
+```
+
+3. Open another browser/profile as user B.
+4. Set cookie:
+
+```js
+document.cookie = 'user=B; Path=/; SameSite=Lax'
+location.href = '/dashboard'
+```
+
+Expected bad result on Netlify when CDN/Durable cache is hit:
+
+- User B request has `Cookie: user=B`.
+- Page may still show dashboard owner from user A, if A was first after deploy.
+- If B is first after deploy, A later sees B.
+
+## Reproduce with curl
+
+Replace `SITE` with your Netlify URL.
+
+First request as A:
+
+```bash
+SITE='https://YOUR-SITE.netlify.app'
+
+curl -i "$SITE/dashboard" \
+  -H 'Cookie: user=A' \
+  -H 'Accept: text/html' \
+  | tee /tmp/a.html
+```
+
+Second request as B:
+
+```bash
+curl -i "$SITE/dashboard" \
+  -H 'Cookie: user=B' \
+  -H 'Accept: text/html' \
+  | tee /tmp/b.html
+```
+
+Inspect headers:
+
+```bash
+grep -iE 'cache-control|netlify-cdn-cache-control|netlify-vary|cache-status|age|x-repro|x-nf-request-id' /tmp/a.html /tmp/b.html
+```
+
+Inspect body:
+
+```bash
+grep -oE 'User [A-Z]|Cookie header seen by SSR: [^<]+' /tmp/a.html /tmp/b.html
+```
+
+Also test RSC/flight requests from browser DevTools; in real App Router navigations the poisoned response may be the RSC payload rather than the document HTML.
+
+## Expected smoking-gun headers
+
+Look for:
+
+```txt
+Netlify-CDN-Cache-Control: ... durable
+Netlify-Vary: query=__nextDataReq|_rsc,header=...|rsc,cookie=__prerender_bypass|__next_preview_data
+Cache-Status: "Netlify Durable"; hit
+```
+
+The important part is that `Netlify-Vary` does not include `Cookie` or your auth cookie name.
+
+## Adapter source paths to inspect
+
+In `opennextjs-netlify`:
+
+- `src/run/handlers/server.ts`
+  - calls `setCacheControlHeaders`, `setVaryHeaders`, `setCacheStatusHeader`
+- `src/run/headers.ts`
+  - `setCacheControlHeaders()` promotes cacheable Next responses to `netlify-cdn-cache-control` and appends `durable`
+  - `setVaryHeaders()` defaults to only preview cookies:
+    - `__prerender_bypass`
+    - `__next_preview_data`
+
+This combination is what makes a first authenticated request cacheable for later authenticated requests when a dynamic/user-specific response is accidentally considered cacheable.
+
+## Turn off the simulated build failure
+
+Set:
+
+```bash
+SIMULATE_CONTENTFUL_FAILURE=0
+```
+
+or remove the env var and redeploy. The middleware stops adding cacheable headers to `/dashboard`.
