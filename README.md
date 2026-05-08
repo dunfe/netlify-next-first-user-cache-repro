@@ -4,7 +4,7 @@ This is a minimal project to reproduce the reported behavior:
 
 - `/dashboard` is a dynamic App Router page (`ƒ`).
 - It reads the current user from the `user` cookie on every SSR render.
-- `pages/[...slug].tsx` is a Pages Router SSG catch-all route without enumerated child paths, to test whether a Contentful-style catch-all can shadow or poison `/dashboard` route classification.
+- `app/[...slug]/page.tsx` is an App Router SSG catch-all route. When Contentful is healthy it renders generated child pages; when simulated Contentful connection fails, it still appears as `● /[...slug]` without child paths.
 - A simulated Contentful build failure is enabled with `SIMULATE_CONTENTFUL_FAILURE=1`.
 - When that flag is enabled, middleware adds a cacheable `Cache-Control` header to `/dashboard`.
 - On Netlify, the Next adapter/runtime can promote that response to `Netlify-CDN-Cache-Control: ..., durable` while the default `Netlify-Vary` does **not** vary by auth cookie.
@@ -17,10 +17,10 @@ This project is pinned to Next.js `14.2.35` and `@netlify/plugin-nextjs` `4.41.5
 - `app/dashboard/page.tsx`
   - dynamic page
   - reads `cookies()` and prints both current header user and dashboard data owner
-- `pages/[...slug].tsx`
-  - Pages Router SSG catch-all page, like a Contentful route mapper
-  - uses `getStaticPaths()` with `paths: []` and `fallback: 'blocking'`
-  - this keeps the build output as `● /[...slug]` without listed children
+- `app/[...slug]/page.tsx`
+  - App Router SSG catch-all page, like a Contentful route mapper
+  - when `SIMULATE_CONTENTFUL_FAILURE=0`, `generateStaticParams()` returns CMS-like child paths
+  - when `SIMULATE_CONTENTFUL_FAILURE=1`, `generateStaticParams()` returns `[]`, so build output stays `● /[...slug]` without listed children
   - used to test whether `/[...slug]` causes `/dashboard` to be treated as SSG by Next/Netlify
 - `middleware.ts`
   - only when `SIMULATE_CONTENTFUL_FAILURE=1`, adds cacheable response headers for `/dashboard`
