@@ -4,7 +4,7 @@ This is a minimal project to reproduce the reported behavior:
 
 - `/dashboard` is a dynamic App Router page (`ƒ`).
 - It reads the current user from the `user` cookie on every SSR render.
-- `app/[...slug]/page.tsx` is an SSG catch-all route, including a generated `dashboard` slug candidate, to test whether a Contentful-style catch-all can shadow or poison `/dashboard` route classification.
+- `pages/[...slug].tsx` is a Pages Router SSG catch-all route without enumerated child paths, to test whether a Contentful-style catch-all can shadow or poison `/dashboard` route classification.
 - A simulated Contentful build failure is enabled with `SIMULATE_CONTENTFUL_FAILURE=1`.
 - When that flag is enabled, middleware adds a cacheable `Cache-Control` header to `/dashboard`.
 - On Netlify, the Next adapter/runtime can promote that response to `Netlify-CDN-Cache-Control: ..., durable` while the default `Netlify-Vary` does **not** vary by auth cookie.
@@ -17,9 +17,10 @@ This project is pinned to Next.js `14.2.35` and `@netlify/plugin-nextjs` `4.41.5
 - `app/dashboard/page.tsx`
   - dynamic page
   - reads `cookies()` and prints both current header user and dashboard data owner
-- `app/[...slug]/page.tsx`
-  - SSG catch-all page, like a Contentful route mapper
-  - generates `/dashboard` as a slug candidate plus other CMS-like paths
+- `pages/[...slug].tsx`
+  - Pages Router SSG catch-all page, like a Contentful route mapper
+  - uses `getStaticPaths()` with `paths: []` and `fallback: 'blocking'`
+  - this keeps the build output as `● /[...slug]` without listed children
   - used to test whether `/[...slug]` causes `/dashboard` to be treated as SSG by Next/Netlify
 - `middleware.ts`
   - only when `SIMULATE_CONTENTFUL_FAILURE=1`, adds cacheable response headers for `/dashboard`
