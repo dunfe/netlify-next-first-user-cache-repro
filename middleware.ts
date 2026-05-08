@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const response = NextResponse.next()
 
   // This simulates the bad post-build state: Contentful static generation failed, build still passed,

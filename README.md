@@ -9,14 +9,14 @@ This is a minimal project to reproduce the reported behavior:
 - On Netlify, the Next adapter/runtime can promote that response to `Netlify-CDN-Cache-Control: ..., durable` while the default `Netlify-Vary` does **not** vary by auth cookie.
 - Result: the first user to hit `/dashboard` after deploy can seed the cached dashboard response for later users.
 
-This is intentionally a *root-cause repro*, not a recommended application pattern.
+This project is pinned to Next.js `14.2.35` and `@netlify/plugin-nextjs` `4.41.5` to test the older runtime where the issue was reported.
 
 ## Files of interest
 
 - `app/dashboard/page.tsx`
   - dynamic page
   - reads `cookies()` and prints both current header user and dashboard data owner
-- `proxy.ts` (Next.js 16 replacement for middleware)
+- `middleware.ts`
   - only when `SIMULATE_CONTENTFUL_FAILURE=1`, adds cacheable response headers for `/dashboard`
   - this mimics the post-build bad state seen when Contentful static generation fails but the deploy still succeeds
 - `scripts/simulate-contentful-build.js`
