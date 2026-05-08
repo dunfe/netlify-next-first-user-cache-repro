@@ -19,7 +19,7 @@ On Netlify Runtime v4 (`@netlify/plugin-nextjs@4.41.5`), the generated `rsc-data
 
 The request is then served as an RSC response and stored by **Netlify Durable Cache**. Netlify's vary key for this response includes only Next preview cookies, not the real auth/session cookie. Therefore the first authenticated RSC payload can be reused for later users.
 
-The same reproduction does **not** leak on Vercel because Vercel returns `private, no-cache, no-store` for the RSC response and reports `x-vercel-cache: MISS`.
+The same reproduction does **not** leak on Netlify Runtime v5.15.11 or on Vercel. Runtime v5 no longer generates the old v4 `rsc-data` edge function path and, in the live test, bypasses Durable Cache for the user-specific `/dashboard` RSC response. Vercel also does not leak because it returns `private, no-cache, no-store` for the RSC response and reports `x-vercel-cache: MISS`.
 
 ## Affected stack in this repro
 
@@ -353,6 +353,122 @@ cache-status: "Netlify Durable"; hit
 netlify-vary: cookie=__next_preview_data:presence|__prerender_bypass:presence
 ```
 
+## Netlify Runtime v5 comparison
+
+A second repo was created with the same Next.js app shape but with the latest Netlify Next runtime/plugin:
+
+```json
+{
+  "next": "14.2.35",
+  "@netlify/plugin-nextjs": "5.15.11",
+  "react": "18.3.1",
+  "react-dom": "18.3.1"
+}
+```
+
+Live site tested:
+
+```txt
+https://netlify-next-latest-runtime-cache-rep.netlify.app
+```
+
+The route shape was still active:
+
+```txt
+/contentful/hello -> 200, App Router SSG catch-all
+/marketing/landing -> 200, App Router SSG catch-all
+/dashboard -> correct dynamic user per cookie
+```
+
+Build output still contained the same important app routes:
+
+```txt
+Route (app)
+├ ● /[...slug]
+├ ● /blog/[slug]
+├   └ /blog/hello
+└ ƒ /dashboard
+```
+
+However, the generated Netlify build output was different:
+
+```txt
+Using Next.js Runtime - v5.15.11
+
+Functions:
+- ___netlify-server-handler/___netlify-server-handler.mjs
+
+Edge Functions:
+- ___netlify-edge-handler-middleware
+```
+
+Runtime v5 did **not** generate the old Runtime v4 edge functions involved in the failing path:
+
+```txt
+rsc-data
+next_middleware
+___netlify-handler
+___netlify-odb-handler
+```
+
+### Runtime v5 RSC A/B result
+
+The same RSC request pattern was tested against Runtime v5:
+
+```bash
+curl -i "$SITE/dashboard?_rsc=<token>" \
+  -H 'Cookie: user=A' \
+  -H 'RSC: 1' \
+  -H 'Next-Url: /' \
+  -H 'Next-Router-State-Tree: <encoded-tree>'
+
+curl -i "$SITE/dashboard?_rsc=<token>" \
+  -H 'Cookie: user=B' \
+  -H 'RSC: 1' \
+  -H 'Next-Url: /' \
+  -H 'Next-Router-State-Tree: <encoded-tree>'
+```
+
+Observed for user A:
+
+```txt
+content-type: text/x-component
+cache-control: public, max-age=0, s-maxage=31536000, stale-while-revalidate=31536000
+cache-status: "Netlify Durable"; fwd=bypass, "Netlify Edge"; fwd=miss
+netlify-vary: query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|accept-encoding,cookie=__prerender_bypass|__next_preview_data
+body: User A
+```
+
+Observed for user B:
+
+```txt
+content-type: text/x-component
+cache-control: public, max-age=0, s-maxage=31536000, stale-while-revalidate=31536000
+cache-status: "Netlify Durable"; fwd=bypass, "Netlify Edge"; fwd=miss
+netlify-vary: query=__nextDataReq|_rsc,header=x-nextjs-data|x-next-debug-logging|next-router-prefetch|next-router-segment-prefetch|next-router-state-tree|next-url|rsc|accept-encoding,cookie=__prerender_bypass|__next_preview_data
+body: User B
+```
+
+Repeated requests also stayed `fwd=bypass`; they did not become Durable `hit` responses for `/dashboard` RSC. This is the key behavioral difference from Runtime v4.
+
+### Why Runtime v5 does not reproduce
+
+The evidence points to two practical differences:
+
+1. **The old v4 `rsc-data` edge function is gone.**
+   - Runtime v4 generated `.netlify/edge-functions/edge-shared/rsc-data.ts`.
+   - That code built RSC matchers from `prerender-manifest.json` dynamic SSG routes.
+   - The broad `app/[...slug]` regex `^/(.+?)(?:/)?$` could therefore match `/dashboard` RSC requests.
+   - Runtime v5 uses `___netlify-server-handler` and `___netlify-edge-handler-middleware` instead, so the old catch-all RSC edge rewrite path is not present.
+
+2. **Dynamic `/dashboard` RSC responses are bypassed from Durable Cache in Runtime v5.**
+   - Even though the repro middleware still emits public cache headers, Runtime v5 returned `cache-status: "Netlify Durable"; fwd=bypass` for `/dashboard` RSC.
+   - Because the response is bypassed, there is no `stored` event and no later `hit` that can replay user A's payload to user B.
+
+Runtime v5 still emits a broad `Netlify-Vary` value that does not include the application `user` cookie. However, for this dynamic RSC route the important protective behavior is that Durable Cache is bypassed, so the missing auth cookie in `Netlify-Vary` does not lead to cross-user reuse.
+
+This strongly suggests the bug is specific to the legacy Runtime v4 RSC data routing/cache path and is fixed or avoided by the current Runtime v5 architecture.
+
 ## Vercel comparison
 
 The same repository deployed to Vercel:
@@ -396,7 +512,8 @@ Vercel does not leak because it does not store/share this user-specific RSC resp
 9. The RSC response for `/dashboard` contains user-specific dashboard data.
 10. Because the response is cacheable in the bad Contentful-failure state, Netlify Durable Cache stores it.
 11. Netlify varies the cached RSC response only on Next preview cookies, not on auth/session cookies.
-12. Later users receive the first user's cached RSC payload.
+12. Later users receive the first user's cached RSC payload on Runtime v4.
+13. On Netlify Runtime v5.15.11, the old `rsc-data` edge function is no longer generated and `/dashboard` RSC responses are `fwd=bypass`, so this chain stops before a user-specific RSC payload is stored/reused.
 
 ## Why the issue is hard to reproduce manually
 
