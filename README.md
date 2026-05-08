@@ -1,5 +1,7 @@
 # Netlify + Next.js first-user cache poisoning repro
 
+Detailed root-cause report: [`docs/netlify-rsc-cache-root-cause.md`](docs/netlify-rsc-cache-root-cause.md)
+
 This is a minimal project to reproduce the reported behavior:
 
 - `/dashboard` is a dynamic App Router page (`ƒ`).
