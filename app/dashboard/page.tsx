@@ -1,4 +1,5 @@
 import { cookies, headers } from 'next/headers'
+import { LoginForm } from '../LoginForm'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -36,6 +37,12 @@ export default async function DashboardPage() {
         <p>
           Dashboard data owner: <strong id="dashboard-owner">{userForDashboardData.label}</strong>
         </p>
+      </section>
+
+      <section style={{ padding: 16, border: '1px solid #16a34a', marginBottom: 16 }}>
+        <h2>Manual login</h2>
+        <p>Use this to switch the <code>user</code> cookie without opening devtools.</p>
+        <LoginForm initialUser={userForHeader.id === 'anonymous' ? '' : userForHeader.id} />
       </section>
 
       <section style={{ padding: 16, border: '1px solid #aaa' }}>

@@ -59,24 +59,14 @@ After the deploy is live, test **client-side navigation**, not only direct hard-
 
 1. Open a fresh browser profile as user A.
 2. Visit `/` first.
-3. Set cookie for the site, then navigate through the Next `<Link>` to `/dashboard`:
+3. Type `A` in the **User name** text box.
+4. Click **Login as user**. The form sets `document.cookie = 'user=A; Path=/; SameSite=Lax'` and navigates through the App Router to `/dashboard`.
+5. Open another browser/profile as user B.
+6. Visit `/` first.
+7. Type `B` in the **User name** text box.
+8. Click **Login as user**.
 
-```js
-document.cookie = 'user=A; Path=/; SameSite=Lax'
-location.href = '/'
-// then click the /dashboard link, or run:
-document.querySelector('a[href="/dashboard"]').click()
-```
-
-4. Open another browser/profile as user B.
-5. Repeat from `/` with:
-
-```js
-document.cookie = 'user=B; Path=/; SameSite=Lax'
-location.href = '/'
-// then click the /dashboard link, or run:
-document.querySelector('a[href="/dashboard"]').click()
-```
+You can also switch users from the manual login section on `/dashboard`; it updates the `user` cookie and refreshes the route without opening browser devtools.
 
 Expected bad result on Netlify when the RSC/Durable cache is hit:
 
