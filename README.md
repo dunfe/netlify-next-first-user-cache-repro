@@ -60,7 +60,7 @@ After the deploy is live, test **client-side navigation**, not only direct hard-
 1. Open a fresh browser profile as user A.
 2. Visit `/` first.
 3. Type `A` in the **User name** text box.
-4. Click **Login as user**. The form sets `document.cookie = 'user=A; Path=/; SameSite=Lax'` and navigates through the App Router to `/dashboard`.
+4. Click **Login as user**. The form sets `document.cookie = 'user=A; Path=/; SameSite=Lax'` and performs an App Router `router.push('/dashboard')` without a hard refresh.
 5. Open another browser/profile as user B.
 6. Visit `/` first.
 7. Type `B` in the **User name** text box.

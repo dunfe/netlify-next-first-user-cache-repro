@@ -7,7 +7,7 @@ export default function Home() {
       <h1>Netlify Next first-user cache poisoning repro</h1>
       <p>
         Type a user name below and click the login button. The form sets the <code>user</code> cookie, then navigates to{' '}
-        <Link href="/dashboard">/dashboard</Link> so you can reproduce the issue without browser devtools.
+        <Link href="/dashboard" prefetch={false}>/dashboard</Link> so you can reproduce the issue without browser devtools.
       </p>
 
       <LoginForm />

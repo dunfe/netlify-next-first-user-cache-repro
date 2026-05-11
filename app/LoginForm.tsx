@@ -21,7 +21,6 @@ export function LoginForm({ initialUser = '' }: LoginFormProps) {
 
     document.cookie = `user=${encodeURIComponent(normalizedUser)}; Path=/; Max-Age=31536000; SameSite=Lax`
     router.push('/dashboard')
-    router.refresh()
   }
 
   return (
